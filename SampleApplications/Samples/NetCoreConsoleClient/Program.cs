@@ -142,87 +142,37 @@ namespace NetCoreConsoleClient
             var session = await Session.Create(config, endpoint, false, ".Net Core OPC UA Console Client", 60000, new UserIdentity(new AnonymousIdentityToken()), null);
 
 
-
-            // Viser alle objekter i namespace
+            Console.WriteLine("---------------------------------------------");
             
-            Console.WriteLine("4 - Browse the OPC UA server namespace.");
-            ReferenceDescriptionCollection references;
-            Byte[] continuationPoint;
 
-            references = session.FetchReferences(ObjectIds.ObjectsFolder);
 
-            session.Browse(
-                null,
-                null,
-                ObjectIds.ObjectsFolder,
-                0u,
-                BrowseDirection.Forward,
-                ReferenceTypeIds.HierarchicalReferences,
-                true,
-                (uint)NodeClass.Variable | (uint)NodeClass.Object | (uint)NodeClass.Method,
-                out continuationPoint,
-                out references);
-
-            Console.WriteLine(" DisplayName, BrowseName, NodeClass");
-            foreach (var rd in references)
+            // Browse namespace
+            ReferenceDescriptionCollection rootNamespace = Namespace.BrowseRoot(session); // explores root namespace
+            foreach (var reference in rootNamespace)
             {
-                Console.WriteLine(" {0}, {1}, {2}", rd.DisplayName, rd.BrowseName, rd.NodeClass);
-                ReferenceDescriptionCollection nextRefs;
-                byte[] nextCp;
-                session.Browse(
-                    null,
-                    null,
-                    ExpandedNodeId.ToNodeId(rd.NodeId, session.NamespaceUris),
-                    0u,
-                    BrowseDirection.Forward,
-                    ReferenceTypeIds.HierarchicalReferences,
-                    true,
-                    (uint)NodeClass.Variable | (uint)NodeClass.Object | (uint)NodeClass.Method,
-                    out nextCp,
-                    out nextRefs);
-
-                foreach (var nextRd in nextRefs)
-                {
-                    Console.WriteLine("   + {0}, {1}, {2}, {3}", nextRd.DisplayName, nextRd.NodeId ,nextRd.BrowseName, nextRd.NodeClass);
-                }
+                Console.WriteLine(reference.DisplayName);
+                ReferenceDescriptionCollection subNamespace = Namespace.BrowseSub(session, reference); // explores sub namespaces
+                foreach (var nextReference in subNamespace)
+                    Console.WriteLine("+ " + nextReference.DisplayName);
             }
 
-            Console.WriteLine("---------------------------------------------");
+            // Read value on NodeId
             Console.WriteLine(session.ReadValue(2256)); // læser values på node id 2256 (ServerStatus) -> se namespace browse i runtime console http://documentation.unified-automation.com/uasdkhp/1.0.0/html/_l2_ua_node_ids.html
-            Program.CreateSubscription(session);
+
+            // Create subscription on session
+            await ServerSubscription.Create(session, "i = 2258", 1000);
 
 
-            
+
+
 
             Console.WriteLine("Running...Press any key to exit...");
-            Console.ReadKey(true);
+            Console.ReadKey(true); // Keep alive
             session.Close();
 
 
         }
-        
 
-
-
-        private static Subscription CreateSubscription(Session session)
-        {
-            var subscription = new Subscription(session.DefaultSubscription) { PublishingInterval = 5000 };
-
-            Console.WriteLine("Subscription created");
-            var list = new List<MonitoredItem> {
-               new MonitoredItem(subscription.DefaultItem)
-               {
-                   DisplayName = "ServerStatusCurrentTime", StartNodeId = "i=2258"
-               }
-           };
-            list.ForEach(i => i.Notification += OnNotification);
-            subscription.AddItems(list);
-
-            session.AddSubscription(subscription);
-            subscription.Create();
-
-            return subscription;
-        }
 
         private static void CertificateValidator_CertificateValidation(CertificateValidator validator, CertificateValidationEventArgs e)
         {
@@ -230,12 +180,10 @@ namespace NetCoreConsoleClient
             e.Accept = (e.Error.StatusCode == StatusCodes.BadCertificateUntrusted);
         }
 
-        private static void OnNotification(MonitoredItem item, MonitoredItemNotificationEventArgs e)
-        {
-            foreach (var value in item.DequeueValues())
-            {
-                Console.WriteLine("{0}: {1}, {2}, {3}", item.DisplayName, value.Value, value.SourceTimestamp, value.StatusCode);
-            }
-        }
+
+
+
+
+
     }
 }
